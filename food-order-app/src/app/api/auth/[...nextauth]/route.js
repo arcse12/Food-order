@@ -27,18 +27,54 @@ export const authOptions = {
         const email = credentials?.email;
         const password = credentials?.password;
 
-        mongoose.connect(process.env.MONGO_URL);
-        const user = await User.findOne({email});
-        const passwordOk = user && bcrypt.compareSync(password, user.password);
-
-        if (passwordOk) {
-          return user;
+        if (!email || !password) {
+          console.error("Missing email or password");
+          throw new Error("Missing email or password");
         }
 
-        return null
+        try {
+          await mongoose.connect(process.env.MONGO_URL);
+          const user = await User.findOne({email});
+          
+          if (!user) {
+            console.error(`No user found for email: ${email}`);
+            return null;
+          }
+          
+          const passwordOk = await bcrypt.compare(password, user.password);
+
+          if (passwordOk) {
+            return user;
+          } else {
+            console.error(`Invalid password for email: ${email}`);
+            return null;
+          }
+        } catch (error) {
+          console.error("Error in authorize function:", error);
+          throw new Error("An error occurred during authentication");
+        }
       }
     })
   ],
+  callbacks: {
+    async signIn({ user, account, profile, email, credentials }) {
+      console.log("SignIn callback:", { user, account, profile, email });
+      return true;
+    },
+    async jwt({ token, user, account, profile, isNewUser }) {
+      console.log("JWT callback:", { token, user, account, profile, isNewUser });
+      return token;
+    },
+    async session({ session, user, token }) {
+      console.log("Session callback:", { session, user, token });
+      return session;
+    }
+  },
+  pages: {
+    signIn: '/auth/signin',
+    error: '/auth/error',
+  },
+  debug: process.env.NODE_ENV === 'development',
 };
 
 export async function isAdmin() {
